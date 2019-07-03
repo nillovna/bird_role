@@ -1,0 +1,6 @@
+---
+# defaults file for bird
+
+bird_rc_pre_actions: []
+bird_rc_post_actions: []
+bird: {}

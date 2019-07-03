@@ -1,0 +1,20 @@
+---
+# handlers file for bird
+
+- name: disable_bird
+  systemd:
+    name: bird
+    enabled: no
+  when: bird_install.changed
+
+- name: enable_bird
+  systemd:
+    name: bird
+    enabled: yes
+  when: bird_install.changed
+
+- name: reload_bird
+  systemd:
+    name: bird
+    state: reloaded
+  when: bird_conf_update.changed

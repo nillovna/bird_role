@@ -1,0 +1,79 @@
+log syslog { debug, trace, info, remote, warning, error, auth, fatal, bug };
+
+router id {{ bird.router_id | default(ansible_default_ipv4.address) }};
+
+protocol device {
+        scan time 60;
+}
+
+{% if bird.tables is defined %}
+{% for table in bird.tables %}
+table {{ table.name }};
+
+{% if table.kernel is defined %}
+protocol kernel k{{ table.name }} {
+    learn;
+    scan time {{ table.kernel.scan_time | default(60) }};
+    import {{ table.kernel.import | default("all") }};
+    export {{ table.kernel.export | default("all") }};
+    device routes {{ table.kernel.device_routes | default("yes") }};
+    table {{ table.name }};
+    kernel table {{ table.kernel.table }};
+}
+{% endif %}
+
+{% if table.direct is defined %}
+protocol direct d{{ table.name }} {
+      table {{ table.name }};
+      interface {{ table.direct.interface | join(", ") }};
+}
+{% endif %}
+
+{% if table.filter is defined %}
+filter {{ table.name }}_allowed_nets {
+{% for net in table.filter %}
+  if net ~ {{ net.ipnet }} then {
+{% if table.bgp is defined %}
+{% for i in range(net.prepend) %}
+    bgp_path.prepend({{ table.bgp.local_as }});
+{% endfor %}
+{% endif %}
+    accept;
+  }
+{% endfor %}
+  reject;
+}
+{% endif %}
+
+{% if table.bgp is defined %}
+{% for peer in table.bgp.peers %}
+protocol bgp {{ table.name }}_R{{ loop.index }} {
+  table {{ table.name }};
+  local as {{ table.bgp.local_as }};
+  neighbor {{ peer }} as {{ table.bgp.neighbor_as }};
+  import {{ table.bgp.import | default("all") }};
+  export {{ table.bgp.export | default("all") }};
+{% if table.bgp.bfd is defined %}
+  bfd;
+{% endif %}
+}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if bfd_if is defined and bfd_if %}
+protocol bfd {
+{% for table in bird.tables %}
+{% if table.bgp is defined and table.bgp.bfd is defined %}
+  interface "{{ table.bgp.bfd.interface_name }}" {
+    interval {{ table.bgp.bfd.interface_interval | default("500 ms") }};
+    multiplier {{ table.bgp.bfd.interface_multiplier | default(3) }};
+  };
+{% for peer in table.bgp.peers %}
+  neighbor {{ peer }} dev "{{ table.bgp.bfd.interface_name }}";
+{% endfor %}
+{% endif %}
+{% endfor %}
+}
+{% endif %}

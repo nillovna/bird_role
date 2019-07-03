@@ -1,0 +1,14 @@
+galaxy_info:
+  author: Sofiya.podolskaya.
+  description: bird installing and configuring
+  company: Iqoption Ltd.
+  min_ansible_version: 2.4
+  github_branch: master
+  platforms:
+    - name: Ubuntu
+      versions:
+        - xenial
+  categories:
+    - networking
+    - system
+  license: Proprietary

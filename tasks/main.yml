@@ -1,0 +1,87 @@
+---
+# tasks file for bird
+
+- name: Prepare route table
+  lineinfile:
+    path: /etc/iproute2/rt_tables
+    line: "{{ item.kernel.table }} {{ item.name }}"
+  with_items:
+    "{{ bird.tables }}"
+  when:
+    - bird.tables is defined
+    - item.kernel is defined
+
+- name: Prepare rc.local bird pre actions extended variables
+  set_fact:
+    merged_bird_rc_pre_actions: "{{ bird_rc_pre_actions | join('\n') }}"
+
+- name: Prepare rc.local bird default variables
+  set_fact:
+    default_bird_rc: |
+      {% if bird.tables is defined %}
+      {% for table in bird.tables %}
+      {% if table.filter is defined %}
+      {% for net in table.filter %}
+      /sbin/ip rule add from {{ net.ipnet }} table  {{ table.name }}
+      /sbin/ip rule add from {{ net.ipnet }} lookup {{ table.name }}
+      {% endfor %}
+      {% endif %}
+      {% endfor %}
+      {% endif %}
+
+- name: Prepare rc.local bird post actions extended variables
+  set_fact:
+    merged_bird_rc_post_actions: "{{ bird_rc_post_actions | join('\n') }}"
+
+- name: Prepare routing in rc.local
+  blockinfile:
+    path: /etc/rc.local
+    block: |
+      {{ item.1 }}
+    state: present
+    owner: root
+    group: root
+    mode: 0755
+    insertbefore: '^exit 0'
+    marker: "# {mark} ANSIBLE MANAGED BLOCK {{ item.0 }}"
+  with_indexed_items:
+    - "{{ merged_bird_rc_pre_actions }}"
+    - "{{ default_bird_rc }}"
+    - "{{ merged_bird_rc_post_actions }}"
+
+- name: install bird packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - bird
+  notify:
+    - disable_bird
+    - enable_bird
+  register: bird_install
+
+- name: check bfd
+  set_fact:
+    bfd_if: true
+  with_items:
+    - "{{ bird.tables }}"
+  when:
+    - bird.tables is defined
+    - item.bgp is defined
+    - item.bgp.bfd is defined
+
+- name: Configure bird
+  template:
+    src: templates/bird.conf.j2
+    dest: /etc/bird/bird.conf
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - bird is defined
+  register: bird_conf_update
+  notify:
+    - reload_bird
+
+- name: force bird notified handlers to run (reload_systemd)
+  meta: flush_handlers
