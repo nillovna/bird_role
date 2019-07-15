@@ -105,7 +105,3 @@ Example Playbook
     roles:
        - { role: bird }
 ```
-
-License
--------
-Proprietary
